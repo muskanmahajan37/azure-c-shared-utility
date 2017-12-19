@@ -101,7 +101,11 @@ static bool process_and_destroy_head_message(TLS_IO_INSTANCE* tls_io_instance, I
         PENDING_TRANSMISSION* head_message = (PENDING_TRANSMISSION*)singlylinkedlist_item_get_value(head_pending_io);
         // on_send_complete is checked for NULL during PENDING_TRANSMISSION creation
         /* Codes_SRS_TLSIO_30_095: [ If the send process fails before sending all of the bytes in an enqueued message, the tlsio_dowork shall call the message's on_send_complete along with its associated callback_context and IO_SEND_ERROR. ]*/
-        head_message->on_send_complete(head_message->callback_context, send_result);
+		
+		if (head_message->on_send_complete != NULL)
+		{
+			head_message->on_send_complete(head_message->callback_context, send_result);
+		}
 
         free(head_message->bytes);
         free(head_message);
@@ -391,95 +395,86 @@ static int tlsio_appleios_close_async(CONCRETE_IO_HANDLE tls_io, ON_IO_CLOSE_COM
 static int tlsio_appleios_send_async(CONCRETE_IO_HANDLE tls_io, const void* buffer, size_t size, ON_SEND_COMPLETE on_send_complete, void* callback_context)
 {
     int result;
-    if (on_send_complete == NULL)
-    {
-        /* Codes_SRS_TLSIO_30_062: [ If the on_send_complete is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
-        result = __FAILURE__;
-        LogError("NULL on_send_complete");
-    }
-    else
-    {
-        if (tls_io == NULL)
-        {
-            /* Codes_SRS_TLSIO_30_060: [ If the tlsio_handle parameter is NULL, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-            result = __FAILURE__;
-            LogError("NULL tlsio");
-        }
-        else
-        {
-            if (buffer == NULL)
-            {
-                /* Codes_SRS_TLSIO_30_061: [ If the buffer is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
-                result = __FAILURE__;
-                LogError("NULL buffer");
-            }
-            else
-            {
-                if (size == 0)
-                {
-                    /* Codes_SRS_TLSIO_30_067: [ If the  size  is 0,  tlsio_send  shall log the error and return FAILURE. ]*/
-                    result = __FAILURE__;
-                    LogError("0 size");
-                }
-                else
-                {
-                    TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
-                    if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN)
-                    {
-                        /* Codes_SRS_TLSIO_30_065: [ If tlsio_appleios_compact_open has not been called or the opening process has not been completed, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                        result = __FAILURE__;
-                        LogError("tlsio_appleios_send_async without a prior successful open");
-                    }
-                    else
-                    {
-                        PENDING_TRANSMISSION* pending_transmission = (PENDING_TRANSMISSION*)malloc(sizeof(PENDING_TRANSMISSION));
-                        if (pending_transmission == NULL)
-                        {
-                            /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                            result = __FAILURE__;
-                            LogError("malloc failed");
-                        }
-                        else
-                        {
-                            /* Codes_SRS_TLSIO_30_063: [ The tlsio_appleios_compact_send shall enqueue for transmission the on_send_complete, the callback_context, the size, and the contents of buffer. ]*/
-                            pending_transmission->bytes = (unsigned char*)malloc(size);
+	if (tls_io == NULL)
+	{
+		/* Codes_SRS_TLSIO_30_060: [ If the tlsio_handle parameter is NULL, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+		result = __FAILURE__;
+		LogError("NULL tlsio");
+	}
+	else
+	{
+		if (buffer == NULL)
+		{
+			/* Codes_SRS_TLSIO_30_061: [ If the buffer is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
+			result = __FAILURE__;
+			LogError("NULL buffer");
+		}
+		else
+		{
+			if (size == 0)
+			{
+				/* Codes_SRS_TLSIO_30_067: [ If the  size  is 0,  tlsio_send  shall log the error and return FAILURE. ]*/
+				result = __FAILURE__;
+				LogError("0 size");
+			}
+			else
+			{
+				TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
+				if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN)
+				{
+					/* Codes_SRS_TLSIO_30_065: [ If tlsio_appleios_compact_open has not been called or the opening process has not been completed, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+					result = __FAILURE__;
+					LogError("tlsio_appleios_send_async without a prior successful open");
+				}
+				else
+				{
+					PENDING_TRANSMISSION* pending_transmission = (PENDING_TRANSMISSION*)malloc(sizeof(PENDING_TRANSMISSION));
+					if (pending_transmission == NULL)
+					{
+						/* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+						result = __FAILURE__;
+						LogError("malloc failed");
+					}
+					else
+					{
+						/* Codes_SRS_TLSIO_30_063: [ The tlsio_appleios_compact_send shall enqueue for transmission the on_send_complete, the callback_context, the size, and the contents of buffer. ]*/
+						pending_transmission->bytes = (unsigned char*)malloc(size);
 
-                            if (pending_transmission->bytes == NULL)
-                            {
-                                /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                                LogError("malloc failed");
-                                free(pending_transmission);
-                                result = __FAILURE__;
-                            }
-                            else
-                            {
-                                pending_transmission->size = size;
-                                pending_transmission->unsent_size = size;
-                                pending_transmission->on_send_complete = on_send_complete;
-                                pending_transmission->callback_context = callback_context;
-                                (void)memcpy(pending_transmission->bytes, buffer, size);
+						if (pending_transmission->bytes == NULL)
+						{
+							/* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+							LogError("malloc failed");
+							free(pending_transmission);
+							result = __FAILURE__;
+						}
+						else
+						{
+							pending_transmission->size = size;
+							pending_transmission->unsent_size = size;
+							pending_transmission->on_send_complete = on_send_complete;
+							pending_transmission->callback_context = callback_context;
+							(void)memcpy(pending_transmission->bytes, buffer, size);
 
-                                if (singlylinkedlist_add(tls_io_instance->pending_transmission_list, pending_transmission) == NULL)
-                                {
-                                    /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                                    LogError("Unable to add socket to pending list.");
-                                    free(pending_transmission->bytes);
-                                    free(pending_transmission);
-                                    result = __FAILURE__;
-                                }
-                                else
-                                {
-                                    /* Codes_SRS_TLSIO_30_063: [ On success,  tlsio_send  shall enqueue for transmission the  on_send_complete , the  callback_context , the  size , and the contents of  buffer  and then return 0. ]*/
-                                    result = 0;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        /* Codes_SRS_TLSIO_30_066: [ On failure, on_send_complete shall not be called. ]*/
-    }
+							if (singlylinkedlist_add(tls_io_instance->pending_transmission_list, pending_transmission) == NULL)
+							{
+								/* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+								LogError("Unable to add socket to pending list.");
+								free(pending_transmission->bytes);
+								free(pending_transmission);
+								result = __FAILURE__;
+							}
+							else
+							{
+								/* Codes_SRS_TLSIO_30_063: [ On success,  tlsio_send  shall enqueue for transmission the  on_send_complete , the  callback_context , the  size , and the contents of  buffer  and then return 0. ]*/
+								result = 0;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	/* Codes_SRS_TLSIO_30_066: [ On failure, on_send_complete shall not be called. ]*/
     return result;
 }
 
