@@ -413,17 +413,18 @@ if(${use_http})
             set(aziotsharedutil_target_libs ${aziotsharedutil_target_libs} crypt32 winhttp)
         endif()
     else()
-        if (CMAKE_CROSSCOMPILING)
-            # As mentioned at https://cmake.org/Wiki/CMake_Cross_Compiling the
-            # pkg-config tool can not be used by cmake while cross compiling.
-            message(STATUS "Cross compiling not using pkg-config")
-        else()
-            # try pkg-config first
-            find_package(PkgConfig)
-            if(PKG_CONFIG_FOUND)
-                pkg_check_modules(CURL libcurl)
+        if (NOT use_builtin_httpapi)
+            if (CMAKE_CROSSCOMPILING)
+                # As mentioned at https://cmake.org/Wiki/CMake_Cross_Compiling the
+                # pkg-config tool can not be used by cmake while cross compiling.
+                message(STATUS "Cross compiling not using pkg-config")
+            else()
+                # try pkg-config first
+                find_package(PkgConfig)
+                if(PKG_CONFIG_FOUND)
+                    pkg_check_modules(CURL libcurl)
+                endif()
             endif()
-        endif()
 
             # if that didn't work, try CMake find_package
             if(NOT CURL_FOUND)
@@ -435,8 +436,9 @@ if(${use_http})
 
             include_directories(${CURL_INCLUDE_DIRS})
             set(aziotsharedutil_target_libs ${aziotsharedutil_target_libs} ${CURL_LIBRARIES})
+        endif(NOT use_builtin_httpapi)
     endif()
-endif()
+endif(${use_http})
 
 if(${use_schannel})
     if(WIN32)
