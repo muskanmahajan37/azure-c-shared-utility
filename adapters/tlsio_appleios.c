@@ -13,6 +13,8 @@
 #include "azure_c_shared_utility/agenttime.h"
 #include "azure_c_shared_utility/singlylinkedlist.h"
 #include "azure_c_shared_utility/crt_abstractions.h"
+#include "azure_c_shared_utility/tlsio_options.h"
+
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFError.h>
@@ -65,6 +67,7 @@ typedef struct TLS_IO_INSTANCE_TAG
     CFReadStreamRef sockRead;
     CFWriteStreamRef sockWrite;
     SINGLYLINKEDLIST_HANDLE pending_transmission_list;
+    TLSIO_OPTIONS options;
 } TLS_IO_INSTANCE;
 
 /* Codes_SRS_TLSIO_30_005: [ The phrase "enter TLSIO_STATE_EXT_ERROR" means the adapter shall call the on_io_error function and pass the on_io_error_context that was supplied in tlsio_open_async. ]*/
@@ -179,6 +182,8 @@ static void tlsio_appleios_destroy(CONCRETE_IO_HANDLE tls_io)
             CFRelease(tls_io_instance->hostname);
         }
 
+        tlsio_options_release_resources(&tls_io_instance->options);
+
         if (tls_io_instance->pending_transmission_list != NULL)
         {
             /* Pending messages were cleared in internal_close */
@@ -236,6 +241,7 @@ static CONCRETE_IO_HANDLE tlsio_appleios_create(void* io_create_parameters)
 					result->sockWrite = NULL;
                     result->hostname = NULL;
                     result->pending_transmission_list = NULL;
+                    tlsio_options_initialize(&result->options, TLSIO_OPTION_BIT_NONE);
                     /* Codes_SRS_TLSIO_30_016: [ tlsio_create shall make a copy of the hostname member of io_create_parameters to allow deletion of hostname immediately after the call. ]*/
                     if (NULL == (result->hostname = CFStringCreateWithCString(NULL, tls_io_config->hostname, kCFStringEncodingUTF8)))
                     {
@@ -652,7 +658,7 @@ static void tlsio_appleios_dowork(CONCRETE_IO_HANDLE tls_io)
 static int tlsio_appleios_setoption(CONCRETE_IO_HANDLE tls_io, const char* optionName, const void* value)
 {
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
-    /* Codes_SRS_TLSIO_30_120: [ If the tlsio_handle parameter is NULL, tlsio_appleios_compact_setoption shall do nothing except log an error and return FAILURE. ]*/
+    /* Codes_SRS_TLSIO_30_120: [ If the tlsio_handle parameter is NULL, tlsio_openssl_compact_setoption shall do nothing except log an error and return FAILURE. ]*/
     int result;
     if (tls_io_instance == NULL)
     {
@@ -661,25 +667,18 @@ static int tlsio_appleios_setoption(CONCRETE_IO_HANDLE tls_io, const char* optio
     }
     else
     {
-        /* Codes_SRS_TLSIO_30_121: [ If the optionName parameter is NULL, tlsio_appleios_compact_setoption shall do nothing except log an error and return FAILURE. ]*/
-        if (optionName == NULL)
+        /* Codes_SRS_TLSIO_30_121: [ If the optionName parameter is NULL, tlsio_openssl_compact_setoption shall do nothing except log an error and return FAILURE. ]*/
+        /* Codes_SRS_TLSIO_30_122: [ If the value parameter is NULL, tlsio_openssl_compact_setoption shall do nothing except log an error and return FAILURE. ]*/
+        /* Codes_SRS_TLSIO_OPENSSL_COMPACT_30_520 [ The tlsio_setoption shall do nothing and return FAILURE. ]*/
+        TLSIO_OPTIONS_RESULT options_result = tlsio_options_set(&tls_io_instance->options, optionName, value);
+        if (options_result != TLSIO_OPTIONS_RESULT_SUCCESS)
         {
-            LogError("Required optionName parameter is NULL");
+            LogError("Failed tlsio_options_set");
             result = __FAILURE__;
         }
         else
         {
-            /* Codes_SRS_TLSIO_30_122: [ If the value parameter is NULL, tlsio_appleios_compact_setoption shall do nothing except log an error and return FAILURE. ]*/
-            if (value == NULL)
-            {
-                LogError("Required value parameter is NULL");
-                result = __FAILURE__;
-            }
-            else
-            {
-                /* Codes_SRS_TLSIO_APPLEIOS_COMPACT_30_520 [ The tlsio_setoption shall do nothing and return 0. ]*/
-                result = 0;
-            }
+            result = 0;
         }
     }
     return result;
@@ -689,7 +688,7 @@ static int tlsio_appleios_setoption(CONCRETE_IO_HANDLE tls_io, const char* optio
 static OPTIONHANDLER_HANDLE tlsio_appleios_retrieveoptions(CONCRETE_IO_HANDLE tls_io)
 {
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
-    /* Codes_SRS_TLSIO_30_160: [ If the tlsio_handle parameter is NULL, tlsio_appleios_compact_retrieveoptions shall do nothing except log an error and return FAILURE. ]*/
+    /* Codes_SRS_TLSIO_30_160: [ If the tlsio_handle parameter is NULL, tlsio_openssl_compact_retrieveoptions shall do nothing except log an error and return FAILURE. ]*/
     OPTIONHANDLER_HANDLE result;
     if (tls_io_instance == NULL)
     {
@@ -698,7 +697,7 @@ static OPTIONHANDLER_HANDLE tlsio_appleios_retrieveoptions(CONCRETE_IO_HANDLE tl
     }
     else
     {
-        result = NULL;
+        result = tlsio_options_retrieve_options(&tls_io_instance->options, tlsio_openssl_setoption);
     }
     return result;
 }
