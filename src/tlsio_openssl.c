@@ -18,8 +18,7 @@
 #include "azure_c_shared_utility/crt_abstractions.h"
 #include "azure_c_shared_utility/x509_openssl.h"
 #include "azure_c_shared_utility/shared_util_options.h"
-
-static const char* OPTION_TLS_VERSION = "tls_version";
+#include "azure_c_shared_utility/gballoc.h"
 
 typedef enum TLSIO_STATE_TAG
 {
@@ -103,7 +102,7 @@ static void* tlsio_openssl_CloneOption(const char* name, const void* value)
         {
             result = (void*)value;
         }
-        else if (strcmp(name, "TrustedCerts") == 0)
+        else if (strcmp(name, OPTION_TRUSTED_CERT) == 0)
         {
             if (mallocAndStrcpy_s((char**)&result, value) != 0)
             {
@@ -234,7 +233,7 @@ static void tlsio_openssl_DestroyOption(const char* name, const void* value)
     else
     {
         if (
-            (strcmp(name, "TrustedCerts") == 0) ||
+            (strcmp(name, OPTION_TRUSTED_CERT) == 0) ||
             (strcmp(name, SU_OPTION_X509_CERT) == 0) ||
             (strcmp(name, SU_OPTION_X509_PRIVATE_KEY) == 0) ||
             (strcmp(name, OPTION_X509_ECC_CERT) == 0) ||
@@ -294,7 +293,7 @@ static OPTIONHANDLER_HANDLE tlsio_openssl_retrieveoptions(CONCRETE_IO_HANDLE han
             }
             else if (
                 (tls_io_instance->certificate != NULL) &&
-                (OptionHandler_AddOption(result, "TrustedCerts", tls_io_instance->certificate) != OPTIONHANDLER_OK)
+                (OptionHandler_AddOption(result, OPTION_TRUSTED_CERT, tls_io_instance->certificate) != OPTIONHANDLER_OK)
                 )
             {
                 LogError("unable to save TrustedCerts option");
@@ -681,6 +680,20 @@ static void send_handshake_bytes(TLS_IO_INSTANCE* tls_io_instance)
     }
 }
 
+static void close_openssl_instance(TLS_IO_INSTANCE* tls_io_instance)
+{
+    if (tls_io_instance->ssl != NULL)
+    {
+        SSL_free(tls_io_instance->ssl);
+        tls_io_instance->ssl = NULL;
+    }
+    if (tls_io_instance->ssl_context != NULL)
+    {
+        SSL_CTX_free(tls_io_instance->ssl_context);
+        tls_io_instance->ssl_context = NULL;
+    }
+}
+
 static void on_underlying_io_close_complete(void* context)
 {
     TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)context;
@@ -709,6 +722,8 @@ static void on_underlying_io_close_complete(void* context)
         }
         break;
     }
+
+    close_openssl_instance(tls_io_instance);
 }
 
 static void on_underlying_io_open_complete(void* context, IO_OPEN_RESULT open_result)
@@ -818,20 +833,6 @@ static void on_underlying_io_bytes_received(void* context, const unsigned char* 
             }
             break;
         }
-    }
-}
-
-static void close_openssl_instance(TLS_IO_INSTANCE* tls_io_instance)
-{
-    if (tls_io_instance->ssl != NULL)
-    {
-        SSL_free(tls_io_instance->ssl);
-        tls_io_instance->ssl = NULL;
-    }
-    if (tls_io_instance->ssl_context != NULL)
-    {
-        SSL_CTX_free(tls_io_instance->ssl_context);
-        tls_io_instance->ssl_context = NULL;
     }
 }
 
@@ -1296,7 +1297,11 @@ int tlsio_openssl_close(CONCRETE_IO_HANDLE tls_io, ON_IO_CLOSE_COMPLETE on_io_cl
             tls_io_instance->on_io_close_complete_context = callback_context;
             // xio_close is guaranteed to succeed from the open state, and the callback completes the 
             // transition into TLSIO_STATE_NOT_OPEN
-            (void)xio_close(tls_io_instance->underlying_io, on_underlying_io_close_complete, tls_io_instance);
+            if (xio_close(tls_io_instance->underlying_io, on_underlying_io_close_complete, tls_io_instance) != 0)
+            {
+                close_openssl_instance(tls_io_instance);
+                tls_io_instance->tlsio_state = TLSIO_STATE_NOT_OPEN;
+            }
         }
         else
         {
@@ -1430,7 +1435,7 @@ int tlsio_openssl_setoption(CONCRETE_IO_HANDLE tls_io, const char* optionName, c
     {
         TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
 
-        if (strcmp("TrustedCerts", optionName) == 0)
+        if (strcmp(OPTION_TRUSTED_CERT, optionName) == 0)
         {
             const char* cert = (const char*)value;
             size_t len;

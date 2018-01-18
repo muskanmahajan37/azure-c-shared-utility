@@ -1,22 +1,23 @@
 #Copyright (c) Microsoft. All rights reserved.
 #Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#this is CMakeLists.txt for httpapiexsas_ut
+#this is CMakeLists.txt for urlencode_ut
 cmake_minimum_required(VERSION 2.8.11)
 
-if(NOT ${use_http})
-	message(FATAL_ERROR "httpapiexsas_ut being generated without HTTP support")
+if(MSVC)
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /IGNORE:4217")
+set(CMAKE_SHARED_LINKER_FLAGS "$(CMAKE_SHARED_LINKER_FLAGS) /IGNORE:4217")
 endif()
 
-compileAsC11()
-set(theseTestsName httpapiexsas_ut)
+compileAsC99()
+set(theseTestsName platform_win32_ut)
 
 set(${theseTestsName}_test_files
-${theseTestsName}.c
+    ${theseTestsName}.c
 )
 
 set(${theseTestsName}_c_files
-../../src/httpapiexsas.c
+    ${PLATFORM_C_FILE}
 )
 
 set(${theseTestsName}_h_files
