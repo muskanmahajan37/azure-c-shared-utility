@@ -697,7 +697,7 @@ static OPTIONHANDLER_HANDLE tlsio_appleios_retrieveoptions(CONCRETE_IO_HANDLE tl
     }
     else
     {
-        result = tlsio_options_retrieve_options(&tls_io_instance->options, tlsio_openssl_setoption);
+        result = tlsio_options_retrieve_options(&tls_io_instance->options, tlsio_appleios_setoption);
     }
     return result;
 }
