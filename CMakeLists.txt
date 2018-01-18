@@ -234,11 +234,11 @@ if(UNIX) #LINUX OR APPLE
     set(source_c_files ${source_c_files}
         ./adapters/linux_time.c
     )
-    if(IOS)
+    if(MACOSX)
         set(source_c_files ${source_c_files}
             ./adapters/tlsio_appleios.c
         )
-    endif(IOS)
+    endif(MACOSX)
 endif()
 
 if(${use_http})
