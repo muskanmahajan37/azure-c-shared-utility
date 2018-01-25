@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 #include "azure_c_shared_utility/tlsio_appleios.h"
 #include "azure_c_shared_utility/xio.h"
 #include "azure_c_shared_utility/gballoc.h"
@@ -413,11 +414,16 @@ static void dowork_read(TLS_IO_INSTANCE* tls_io_instance)
 			
 			if (rcv_bytes > 0)
 			{
+                LogBinary("received message ", buffer, rcv_bytes);
 				// tls_io_instance->on_bytes_received was already checked for NULL
 				// in the call to tlsio_appleios_open_async
 				/* Codes_SRS_TLSIO_30_100: [ As long as the TLS connection is able to provide received data, tlsio_dowork shall repeatedly read this data and call on_bytes_received with the pointer to the buffer containing the data, the number of bytes received, and the on_bytes_received_context. ]*/
 				tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
 			}
+            else if (rcv_bytes < 0)
+            {
+                LogInfo("read error!!");
+            }
         }
         /* Codes_SRS_TLSIO_30_102: [ If the TLS connection receives no data then tlsio_dowork shall not call the on_bytes_received callback. ]*/
     }
@@ -435,6 +441,7 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
 
         if (write_result > 0)
         {
+            LogBinary("sent message ", buffer, write_result);
             pending_message->unsent_size -= write_result;
             if (pending_message->unsent_size == 0)
             {
@@ -461,6 +468,24 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
                 // This is an unexpected error, and we need to bail out. Probably lost internet connection.
                 LogInfo("Hard error from CFWriteStreamWrite: %d", CFErrorGetCode(write_error));
                 process_and_destroy_head_message(tls_io_instance, IO_SEND_ERROR);
+            }
+            else
+            {
+                SSLContextRef sslContext = (SSLContextRef)CFWriteStreamCopyProperty(tls_io_instance->sockWrite,
+                                                                     kCFStreamPropertySSLContext);
+                CFIndex handshake_result;
+                int count = 0;
+                struct timespec ts;
+                ts.tv_sec = 0;
+                ts.tv_nsec = 100 * 1000 * 1000; // 100 msec
+                do
+                {
+                    handshake_result = SSLHandshake(sslContext);
+                    nanosleep(&ts, NULL);
+                    LogInfo("shaking %d", count++);
+                } while (handshake_result == errSSLWouldBlock);
+                LogInfo("errSSLWouldBlock on write %d", handshake_result);
+                LogBinary("unsent message ", buffer, pending_message->unsent_size);
             }
         }
     }
