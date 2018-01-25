@@ -19,6 +19,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFError.h>
 #include <CFNetwork/CFSocketStream.h>
+#include <Security/SecureTransport.h>
 
 typedef struct
 {
@@ -394,101 +395,6 @@ static int tlsio_appleios_close_async(CONCRETE_IO_HANDLE tls_io, ON_IO_CLOSE_COM
     return result;
 }
 
-static int tlsio_appleios_send_async(CONCRETE_IO_HANDLE tls_io, const void* buffer, size_t size, ON_SEND_COMPLETE on_send_complete, void* callback_context)
-{
-    int result;
-    if (on_send_complete == NULL)
-    {
-        /* Codes_SRS_TLSIO_30_062: [ If the on_send_complete is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
-        result = __FAILURE__;
-        LogError("NULL on_send_complete");
-    }
-    else
-    {
-        if (tls_io == NULL)
-        {
-            /* Codes_SRS_TLSIO_30_060: [ If the tlsio_handle parameter is NULL, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-            result = __FAILURE__;
-            LogError("NULL tlsio");
-        }
-        else
-        {
-            if (buffer == NULL)
-            {
-                /* Codes_SRS_TLSIO_30_061: [ If the buffer is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
-                result = __FAILURE__;
-                LogError("NULL buffer");
-            }
-            else
-            {
-                if (size == 0)
-                {
-                    /* Codes_SRS_TLSIO_30_067: [ If the  size  is 0,  tlsio_send  shall log the error and return FAILURE. ]*/
-                    result = __FAILURE__;
-                    LogError("0 size");
-                }
-                else
-                {
-                    TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
-                    if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN)
-                    {
-                        /* Codes_SRS_TLSIO_30_065: [ If tlsio_appleios_compact_open has not been called or the opening process has not been completed, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                        result = __FAILURE__;
-                        LogError("tlsio_appleios_send_async without a prior successful open");
-                    }
-                    else
-                    {
-                        PENDING_TRANSMISSION* pending_transmission = (PENDING_TRANSMISSION*)malloc(sizeof(PENDING_TRANSMISSION));
-                        if (pending_transmission == NULL)
-                        {
-                            /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                            result = __FAILURE__;
-                            LogError("malloc failed");
-                        }
-                        else
-                        {
-                            /* Codes_SRS_TLSIO_30_063: [ The tlsio_appleios_compact_send shall enqueue for transmission the on_send_complete, the callback_context, the size, and the contents of buffer. ]*/
-                            pending_transmission->bytes = (unsigned char*)malloc(size);
-
-                            if (pending_transmission->bytes == NULL)
-                            {
-                                /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                                LogError("malloc failed");
-                                free(pending_transmission);
-                                result = __FAILURE__;
-                            }
-                            else
-                            {
-                                pending_transmission->size = size;
-                                pending_transmission->unsent_size = size;
-                                pending_transmission->on_send_complete = on_send_complete;
-                                pending_transmission->callback_context = callback_context;
-                                (void)memcpy(pending_transmission->bytes, buffer, size);
-
-                                if (singlylinkedlist_add(tls_io_instance->pending_transmission_list, pending_transmission) == NULL)
-                                {
-                                    /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
-                                    LogError("Unable to add socket to pending list.");
-                                    free(pending_transmission->bytes);
-                                    free(pending_transmission);
-                                    result = __FAILURE__;
-                                }
-                                else
-                                {
-                                    /* Codes_SRS_TLSIO_30_063: [ On success,  tlsio_send  shall enqueue for transmission the  on_send_complete , the  callback_context , the  size , and the contents of  buffer  and then return 0. ]*/
-                                    result = 0;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        /* Codes_SRS_TLSIO_30_066: [ On failure, on_send_complete shall not be called. ]*/
-    }
-    return result;
-}
-
 static void dowork_read(TLS_IO_INSTANCE* tls_io_instance)
 {
     // TRANSFER_BUFFER_SIZE is not very important because if the message is bigger
@@ -545,13 +451,17 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
         }
         else
         {
-			/* Codes_SRS_TLSIO_30_002: [ The phrase "destroy the failed message" means that the adapter shall remove the message from the queue and destroy it after calling the message's on_send_complete along with its associated callback_context and IO_SEND_ERROR. ]*/
-			/* Codes_SRS_TLSIO_30_005: [ When the adapter enters TLSIO_STATE_EXT_ERROR it shall call the  on_io_error function and pass the on_io_error_context that were supplied in  tlsio_open . ]*/
-			/* Codes_SRS_TLSIO_30_095: [ If the send process fails before sending all of the bytes in an enqueued message, tlsio_dowork shall destroy the failed message and enter TLSIO_STATE_EX_ERROR. ]*/
-			// This is an unexpected error, and we need to bail out. Probably lost internet connection.
-			CFErrorRef hard_error = CFWriteStreamCopyError(tls_io_instance->sockWrite);
-			LogInfo("Error from CFWriteStreamWrite: %d", CFErrorGetCode(hard_error));
-			process_and_destroy_head_message(tls_io_instance, IO_SEND_ERROR);
+            // The write returned non-success. It may be busy, or it may be broken
+            CFErrorRef write_error = CFWriteStreamCopyError(tls_io_instance->sockWrite);
+            if (CFErrorGetCode(write_error) != errSSLWouldBlock)
+            {
+                /* Codes_SRS_TLSIO_30_002: [ The phrase "destroy the failed message" means that the adapter shall remove the message from the queue and destroy it after calling the message's on_send_complete along with its associated callback_context and IO_SEND_ERROR. ]*/
+                /* Codes_SRS_TLSIO_30_005: [ When the adapter enters TLSIO_STATE_EXT_ERROR it shall call the  on_io_error function and pass the on_io_error_context that were supplied in  tlsio_open . ]*/
+                /* Codes_SRS_TLSIO_30_095: [ If the send process fails before sending all of the bytes in an enqueued message, tlsio_dowork shall destroy the failed message and enter TLSIO_STATE_EX_ERROR. ]*/
+                // This is an unexpected error, and we need to bail out. Probably lost internet connection.
+                LogInfo("Hard error from CFWriteStreamWrite: %d", CFErrorGetCode(write_error));
+                process_and_destroy_head_message(tls_io_instance, IO_SEND_ERROR);
+            }
         }
     }
     else
@@ -571,7 +481,7 @@ static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
 	// This will pretty much only fail if we run out of memory
     CFStreamCreatePairWithSocketToHost(NULL, tls_io_instance->hostname, tls_io_instance->port, &tls_io_instance->sockRead, &tls_io_instance->sockWrite);
 
-	if (tls_io_instance->sockRead != NULL || tls_io_instance->sockWrite != NULL)
+	if (tls_io_instance->sockRead != NULL && tls_io_instance->sockWrite != NULL)
 	{
 		if (CFReadStreamSetProperty(tls_io_instance->sockRead, kCFStreamPropertySSLSettings, kCFStreamSocketSecurityLevelTLSv1))
 		{
@@ -580,6 +490,7 @@ static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
 		else
 		{
 			LogInfo("Failed to set socket properties");
+            enter_open_error_state(tls_io_instance);
 		}
 	}
 	else
@@ -680,6 +591,102 @@ static int tlsio_appleios_setoption(CONCRETE_IO_HANDLE tls_io, const char* optio
         {
             result = 0;
         }
+    }
+    return result;
+}
+
+static int tlsio_appleios_send_async(CONCRETE_IO_HANDLE tls_io, const void* buffer, size_t size, ON_SEND_COMPLETE on_send_complete, void* callback_context)
+{
+    int result;
+    if (on_send_complete == NULL)
+    {
+        /* Codes_SRS_TLSIO_30_062: [ If the on_send_complete is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
+        result = __FAILURE__;
+        LogError("NULL on_send_complete");
+    }
+    else
+    {
+        if (tls_io == NULL)
+        {
+            /* Codes_SRS_TLSIO_30_060: [ If the tlsio_handle parameter is NULL, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+            result = __FAILURE__;
+            LogError("NULL tlsio");
+        }
+        else
+        {
+            if (buffer == NULL)
+            {
+                /* Codes_SRS_TLSIO_30_061: [ If the buffer is NULL, tlsio_appleios_compact_send shall log the error and return FAILURE. ]*/
+                result = __FAILURE__;
+                LogError("NULL buffer");
+            }
+            else
+            {
+                if (size == 0)
+                {
+                    /* Codes_SRS_TLSIO_30_067: [ If the  size  is 0,  tlsio_send  shall log the error and return FAILURE. ]*/
+                    result = __FAILURE__;
+                    LogError("0 size");
+                }
+                else
+                {
+                    TLS_IO_INSTANCE* tls_io_instance = (TLS_IO_INSTANCE*)tls_io;
+                    if (tls_io_instance->tlsio_state != TLSIO_STATE_OPEN)
+                    {
+                        /* Codes_SRS_TLSIO_30_065: [ If tlsio_appleios_compact_open has not been called or the opening process has not been completed, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+                        result = __FAILURE__;
+                        LogError("tlsio_appleios_send_async without a prior successful open");
+                    }
+                    else
+                    {
+                        PENDING_TRANSMISSION* pending_transmission = (PENDING_TRANSMISSION*)malloc(sizeof(PENDING_TRANSMISSION));
+                        if (pending_transmission == NULL)
+                        {
+                            /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+                            result = __FAILURE__;
+                            LogError("malloc failed");
+                        }
+                        else
+                        {
+                            /* Codes_SRS_TLSIO_30_063: [ The tlsio_appleios_compact_send shall enqueue for transmission the on_send_complete, the callback_context, the size, and the contents of buffer. ]*/
+                            pending_transmission->bytes = (unsigned char*)malloc(size);
+                            
+                            if (pending_transmission->bytes == NULL)
+                            {
+                                /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+                                LogError("malloc failed");
+                                free(pending_transmission);
+                                result = __FAILURE__;
+                            }
+                            else
+                            {
+                                pending_transmission->size = size;
+                                pending_transmission->unsent_size = size;
+                                pending_transmission->on_send_complete = on_send_complete;
+                                pending_transmission->callback_context = callback_context;
+                                (void)memcpy(pending_transmission->bytes, buffer, size);
+                                
+                                if (singlylinkedlist_add(tls_io_instance->pending_transmission_list, pending_transmission) == NULL)
+                                {
+                                    /* Codes_SRS_TLSIO_30_064: [ If the supplied message cannot be enqueued for transmission, tlsio_appleios_compact_send shall log an error and return FAILURE. ]*/
+                                    LogError("Unable to add socket to pending list.");
+                                    free(pending_transmission->bytes);
+                                    free(pending_transmission);
+                                    result = __FAILURE__;
+                                }
+                                else
+                                {
+                                    /* Codes_SRS_TLSIO_30_063: [ On success,  tlsio_send  shall enqueue for transmission the  on_send_complete , the  callback_context , the  size , and the contents of  buffer  and then return 0. ]*/
+                                    result = 0;
+                                    dowork_send(tls_io_instance);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        /* Codes_SRS_TLSIO_30_066: [ On failure, on_send_complete shall not be called. ]*/
     }
     return result;
 }
