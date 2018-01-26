@@ -133,21 +133,21 @@ static void internal_close(TLS_IO_INSTANCE* tls_io_instance)
     /* Codes_SRS_TLSIO_30_051: [ On success, if the underlying TLS does not support asynchronous closing, then the adapter shall enter TLSIO_STATE_EXT_CLOSED immediately after entering TLSIO_STATE_EX_CLOSING. ]*/
     if (tls_io_instance->tlsio_state == TLSIO_STATE_OPEN)
     {
-		CFReadStreamClose(tls_io_instance->sockRead);
-		CFWriteStreamClose(tls_io_instance->sockWrite);
-	}
-	
-	if (tls_io_instance->sockRead != NULL)
-	{
-		CFRelease(tls_io_instance->sockRead);
-		tls_io_instance->sockRead = NULL;
-	}
-	
-	// If the reader is NULL then the writer should be too but let's be thorough
-	if (tls_io_instance->sockWrite != NULL)
-	{
-		CFRelease(tls_io_instance->sockWrite);
-		tls_io_instance->sockWrite = NULL;
+        CFReadStreamClose(tls_io_instance->sockRead);
+        CFWriteStreamClose(tls_io_instance->sockWrite);
+    }
+    
+    if (tls_io_instance->sockRead != NULL)
+    {
+        CFRelease(tls_io_instance->sockRead);
+        tls_io_instance->sockRead = NULL;
+    }
+    
+    // If the reader is NULL then the writer should be too but let's be thorough
+    if (tls_io_instance->sockWrite != NULL)
+    {
+        CFRelease(tls_io_instance->sockWrite);
+        tls_io_instance->sockWrite = NULL;
     }
 
     while (process_and_destroy_head_message(tls_io_instance, IO_SEND_CANCELLED));
@@ -239,8 +239,8 @@ static CONCRETE_IO_HANDLE tlsio_appleios_create(void* io_create_parameters)
                     memset(result, 0, sizeof(TLS_IO_INSTANCE));
                     result->port = (uint16_t)tls_io_config->port;
                     result->tlsio_state = TLSIO_STATE_CLOSED;
-					result->sockRead = NULL;
-					result->sockWrite = NULL;
+                    result->sockRead = NULL;
+                    result->sockWrite = NULL;
                     result->hostname = NULL;
                     result->pending_transmission_list = NULL;
                     tlsio_options_initialize(&result->options, TLSIO_OPTION_BIT_NONE);
@@ -322,20 +322,20 @@ static int tlsio_appleios_open_async(CONCRETE_IO_HANDLE tls_io,
                     }
                     else
                     {
-						/* Codes_SRS_TLSIO_30_034: [ The tlsio_open shall store the provided on_bytes_received, on_bytes_received_context, on_io_error, on_io_error_context, on_io_open_complete, and on_io_open_complete_context parameters for later use as specified and tested per other line entries in this document. ]*/
-						tls_io_instance->on_bytes_received = on_bytes_received;
-						tls_io_instance->on_bytes_received_context = on_bytes_received_context;
+                        /* Codes_SRS_TLSIO_30_034: [ The tlsio_open shall store the provided on_bytes_received, on_bytes_received_context, on_io_error, on_io_error_context, on_io_open_complete, and on_io_open_complete_context parameters for later use as specified and tested per other line entries in this document. ]*/
+                        tls_io_instance->on_bytes_received = on_bytes_received;
+                        tls_io_instance->on_bytes_received_context = on_bytes_received_context;
 
-						tls_io_instance->on_io_error = on_io_error;
-						tls_io_instance->on_io_error_context = on_io_error_context;
+                        tls_io_instance->on_io_error = on_io_error;
+                        tls_io_instance->on_io_error_context = on_io_error_context;
 
-						tls_io_instance->on_open_complete = on_io_open_complete;
-						tls_io_instance->on_open_complete_context = on_io_open_complete_context;
+                        tls_io_instance->on_open_complete = on_io_open_complete;
+                        tls_io_instance->on_open_complete_context = on_io_open_complete_context;
 
-						/* Codes_SRS_TLSIO_30_035: [ On tlsio_open success the adapter shall enter TLSIO_STATE_EX_OPENING and return 0. ]*/
-						// All the real work happens in dowork
-						tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_DNS;
-						result = 0;
+                        /* Codes_SRS_TLSIO_30_035: [ On tlsio_open success the adapter shall enter TLSIO_STATE_EX_OPENING and return 0. ]*/
+                        // All the real work happens in dowork
+                        tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_DNS;
+                        result = 0;
                     }
                 }
             }
@@ -408,18 +408,18 @@ static void dowork_read(TLS_IO_INSTANCE* tls_io_instance)
 
     if (tls_io_instance->tlsio_state == TLSIO_STATE_OPEN)
     {
-		while (CFReadStreamHasBytesAvailable(tls_io_instance->sockRead))
-		{
-			rcv_bytes = CFReadStreamRead(tls_io_instance->sockRead, buffer, (CFIndex)(sizeof(buffer)));
-			
-			if (rcv_bytes > 0)
-			{
+        while (CFReadStreamHasBytesAvailable(tls_io_instance->sockRead))
+        {
+            rcv_bytes = CFReadStreamRead(tls_io_instance->sockRead, buffer, (CFIndex)(sizeof(buffer)));
+            
+            if (rcv_bytes > 0)
+            {
                 LogBinary("received message ", buffer, rcv_bytes);
-				// tls_io_instance->on_bytes_received was already checked for NULL
-				// in the call to tlsio_appleios_open_async
-				/* Codes_SRS_TLSIO_30_100: [ As long as the TLS connection is able to provide received data, tlsio_dowork shall repeatedly read this data and call on_bytes_received with the pointer to the buffer containing the data, the number of bytes received, and the on_bytes_received_context. ]*/
-				tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
-			}
+                // tls_io_instance->on_bytes_received was already checked for NULL
+                // in the call to tlsio_appleios_open_async
+                /* Codes_SRS_TLSIO_30_100: [ As long as the TLS connection is able to provide received data, tlsio_dowork shall repeatedly read this data and call on_bytes_received with the pointer to the buffer containing the data, the number of bytes received, and the on_bytes_received_context. ]*/
+                tls_io_instance->on_bytes_received(tls_io_instance->on_bytes_received_context, buffer, rcv_bytes);
+            }
             else if (rcv_bytes < 0)
             {
                 LogInfo("read error!!");
@@ -507,42 +507,42 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
 
 static void dowork_poll_dns(TLS_IO_INSTANCE* tls_io_instance)
 {
-	// Sockets on iOS do DNS lookup during open - just change the status
+    // Sockets on iOS do DNS lookup during open - just change the status
     tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_SOCKET;
 }
 
 static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
 {
-	// This will pretty much only fail if we run out of memory
+    // This will pretty much only fail if we run out of memory
     CFStreamCreatePairWithSocketToHost(NULL, tls_io_instance->hostname, tls_io_instance->port, &tls_io_instance->sockRead, &tls_io_instance->sockWrite);
 
-	if (tls_io_instance->sockRead != NULL && tls_io_instance->sockWrite != NULL)
-	{
+    if (tls_io_instance->sockRead != NULL && tls_io_instance->sockWrite != NULL)
+    {
         // The run loops didn't help the failure
         //CFReadStreamScheduleWithRunLoop(tls_io_instance->sockRead, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
         //CFWriteStreamScheduleWithRunLoop(tls_io_instance->sockWrite, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
         //LogInfo("fired run loops");
-		if (CFReadStreamSetProperty(tls_io_instance->sockRead, kCFStreamPropertySSLSettings, kCFStreamSocketSecurityLevelNegotiatedSSL))
-		{
-			tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_SSL;
-		}
-		else
-		{
-			LogInfo("Failed to set socket properties");
+        if (CFReadStreamSetProperty(tls_io_instance->sockRead, kCFStreamPropertySSLSettings, kCFStreamSocketSecurityLevelNegotiatedSSL))
+        {
+            tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_SSL;
+        }
+        else
+        {
+            LogInfo("Failed to set socket properties");
             enter_open_error_state(tls_io_instance);
-		}
-	}
-	else
-	{
-		LogInfo("Unable to create socket pair");
-		enter_open_error_state(tls_io_instance);
-	}
+        }
+    }
+    else
+    {
+        LogInfo("Unable to create socket pair");
+        enter_open_error_state(tls_io_instance);
+    }
 }
 
 static void dowork_poll_open_ssl(TLS_IO_INSTANCE* tls_io_instance)
 {
-	if (CFReadStreamOpen(tls_io_instance->sockRead) && CFWriteStreamOpen(tls_io_instance->sockWrite))
-	{	
+    if (CFReadStreamOpen(tls_io_instance->sockRead) && CFWriteStreamOpen(tls_io_instance->sockWrite))
+    {   
         /* Codes_SRS_TLSIO_30_080: [ The tlsio_dowork shall establish a TLS connection using the hostName and port provided during tlsio_open. ]*/
         // Connect succeeded
         tls_io_instance->tlsio_state = TLSIO_STATE_OPEN;
@@ -552,11 +552,11 @@ static void dowork_poll_open_ssl(TLS_IO_INSTANCE* tls_io_instance)
     }
     else
     {
-		CFErrorRef readError = CFReadStreamCopyError(tls_io_instance->sockRead);
-		CFErrorRef writeError = CFWriteStreamCopyError(tls_io_instance->sockWrite);
-		
-		LogInfo("Error opening streams - read error=%d;write error=%d", CFErrorGetCode(readError), CFErrorGetCode(writeError));
-		enter_open_error_state(tls_io_instance);
+        CFErrorRef readError = CFReadStreamCopyError(tls_io_instance->sockRead);
+        CFErrorRef writeError = CFWriteStreamCopyError(tls_io_instance->sockWrite);
+        
+        LogInfo("Error opening streams - read error=%d;write error=%d", CFErrorGetCode(readError), CFErrorGetCode(writeError));
+        enter_open_error_state(tls_io_instance);
     }
 }
 
