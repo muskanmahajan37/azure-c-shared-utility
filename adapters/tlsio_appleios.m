@@ -16,7 +16,7 @@
 #include "azure_c_shared_utility/crt_abstractions.h"
 #include "azure_c_shared_utility/tlsio_options.h"
 
-
+#import <Foundation/NSStream.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFError.h>
 #include <CFNetwork/CFSocketStream.h>
@@ -66,8 +66,8 @@ typedef struct TLS_IO_INSTANCE_TAG
     TLSIO_STATE tlsio_state;
     CFStringRef hostname;
     uint16_t port;
-    CFReadStreamRef sockRead;
-    CFWriteStreamRef sockWrite;
+    NSInputStream* sockRead;
+    NSOutputStream* sockWrite;
     SINGLYLINKEDLIST_HANDLE pending_transmission_list;
     TLSIO_OPTIONS options;
 } TLS_IO_INSTANCE;
@@ -514,7 +514,12 @@ static void dowork_poll_dns(TLS_IO_INSTANCE* tls_io_instance)
 static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
 {
     // This will pretty much only fail if we run out of memory
-    CFStreamCreatePairWithSocketToHost(NULL, tls_io_instance->hostname, tls_io_instance->port, &tls_io_instance->sockRead, &tls_io_instance->sockWrite);
+    CFReadStreamRef inputStream = NULL;
+    CFWriteStreamRef outputStream = NULL;
+    CFStreamCreatePairWithSocketToHost(NULL, tls_io_instance->hostname, tls_io_instance->port,
+                                       &inputStream, &outputStream);
+    tls_io_instance->sockRead = CFBridgingRelease(inputStream);
+    tls_io_instance->sockWrite = CFBridgingRelease(outputStream);
 
     if (tls_io_instance->sockRead != NULL && tls_io_instance->sockWrite != NULL)
     {

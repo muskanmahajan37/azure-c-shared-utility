@@ -236,7 +236,7 @@ if(UNIX) #LINUX OR APPLE
     )
     if(MACOSX)
         set(source_c_files ${source_c_files}
-            ./adapters/tlsio_appleios.c
+            ./adapters/tlsio_appleios.m
             ./pal/tlsio_options.c
         )
     endif(MACOSX)
