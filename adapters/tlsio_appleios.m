@@ -133,8 +133,8 @@ static void internal_close(TLS_IO_INSTANCE* tls_io_instance)
     /* Codes_SRS_TLSIO_30_051: [ On success, if the underlying TLS does not support asynchronous closing, then the adapter shall enter TLSIO_STATE_EXT_CLOSED immediately after entering TLSIO_STATE_EX_CLOSING. ]*/
     if (tls_io_instance->tlsio_state == TLSIO_STATE_OPEN)
     {
-        CFReadStreamClose(tls_io_instance->sockRead);
-        CFWriteStreamClose(tls_io_instance->sockWrite);
+        [tls_io_instance->sockRead close];
+        [tls_io_instance->sockWrite close];
     }
     
     if (tls_io_instance->sockRead != NULL)
@@ -404,13 +404,14 @@ static void dowork_read(TLS_IO_INSTANCE* tls_io_instance)
     // Putting this buffer in a small function also allows it to exist on the stack
     // rather than adding to heap fragmentation.
     uint8_t buffer[TLSIO_RECEIVE_BUFFER_SIZE];
-    CFIndex rcv_bytes;
+    NSInteger rcv_bytes;
 
     if (tls_io_instance->tlsio_state == TLSIO_STATE_OPEN)
     {
-        while (CFReadStreamHasBytesAvailable(tls_io_instance->sockRead))
+        while (tls_io_instance->sockRead.hasBytesAvailable)
         {
-            rcv_bytes = CFReadStreamRead(tls_io_instance->sockRead, buffer, (CFIndex)(sizeof(buffer)));
+            //rcv_bytes = CFReadStreamRead(tls_io_instance->sockRead, buffer, (CFIndex)(sizeof(buffer)));
+            rcv_bytes = [tls_io_instance->sockRead read:buffer maxLength:sizeof(buffer)];
             
             if (rcv_bytes > 0)
             {
@@ -437,9 +438,10 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
         PENDING_TRANSMISSION* pending_message = (PENDING_TRANSMISSION*)singlylinkedlist_item_get_value(first_pending_io);
         uint8_t* buffer = ((uint8_t*)pending_message->bytes) + pending_message->size - pending_message->unsent_size;
 
-        if (CFWriteStreamCanAcceptBytes(tls_io_instance->sockWrite))
+        if (tls_io_instance->sockWrite.hasSpaceAvailable)
         {
-        CFIndex write_result = CFWriteStreamWrite(tls_io_instance->sockWrite, buffer, pending_message->unsent_size);
+            //CFIndex write_result = CFWriteStreamWrite(tls_io_instance->sockWrite, buffer, pending_message->unsent_size);
+            NSInteger write_result = [tls_io_instance->sockWrite write:buffer maxLength:pending_message->unsent_size];
 
             if (write_result > 0)
             {
