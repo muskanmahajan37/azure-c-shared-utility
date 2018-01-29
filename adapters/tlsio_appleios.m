@@ -17,6 +17,7 @@
 #include "azure_c_shared_utility/tlsio_options.h"
 
 #import <Foundation/NSStream.h>
+#import <Foundation/NSRunLoop.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreFoundation/CFError.h>
 #include <CFNetwork/CFSocketStream.h>
@@ -460,45 +461,33 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
                     // This empty else compiles to nothing but helps readability
                 }
             }
+            else if (write_result == 0)
+            {
+                LogInfo("write_result == 0");
+            }
             else
             {
-                // The write returned non-success. It may be busy, or it may be broken
-                CFErrorRef write_error = CFWriteStreamCopyError(tls_io_instance->sockWrite);
-                if (CFErrorGetCode(write_error) != errSSLWouldBlock)
-                {
+                // // The write returned non-success. It may be busy, or it may be broken
+                // CFErrorRef write_error = CFWriteStreamCopyError(tls_io_instance->sockWrite);
+                // if (CFErrorGetCode(write_error) != errSSLWouldBlock)
+                // {
                     /* Codes_SRS_TLSIO_30_002: [ The phrase "destroy the failed message" means that the adapter shall remove the message from the queue and destroy it after calling the message's on_send_complete along with its associated callback_context and IO_SEND_ERROR. ]*/
                     /* Codes_SRS_TLSIO_30_005: [ When the adapter enters TLSIO_STATE_EXT_ERROR it shall call the  on_io_error function and pass the on_io_error_context that were supplied in  tlsio_open . ]*/
                     /* Codes_SRS_TLSIO_30_095: [ If the send process fails before sending all of the bytes in an enqueued message, tlsio_dowork shall destroy the failed message and enter TLSIO_STATE_EX_ERROR. ]*/
                     // This is an unexpected error, and we need to bail out. Probably lost internet connection.
-                    LogInfo("Hard error from CFWriteStreamWrite: %d", CFErrorGetCode(write_error));
-                    process_and_destroy_head_message(tls_io_instance, IO_SEND_ERROR);
-                }
-                else
-                {
-                    //SSLContextRef sslContext = (SSLContextRef)CFWriteStreamCopyProperty(tls_io_instance->sockWrite,
-                    //                                                     kCFStreamPropertySSLContext);
-    //                CFIndex handshake_result;
-    //                int count = 0;
-    //                struct timespec ts;
-    //                ts.tv_sec = 0;
-    //                ts.tv_nsec = 100 * 1000 * 1000; // 100 msec
-    //                do
-    //                {
-    //                    //handshake_result = CFWriteStreamWrite(tls_io_instance->sockWrite, buffer, 0);
-    //                    //write_error = CFWriteStreamCopyError(tls_io_instance->sockWrite);
-    //                    nanosleep(&ts, NULL);
-    //                    LogInfo("shaking %d", count++);
-    //                } while (handshake_result == errSSLWouldBlock);
-                    LogInfo("errSSLWouldBlock on write");
+                    LogInfo("Hard error from CFWriteStreamWrite");
                     LogBinary("unsent message ", buffer, pending_message->unsent_size);
-                }
+                    process_and_destroy_head_message(tls_io_instance, IO_SEND_ERROR);
+                    //LogInfo("write_result < 0");
+                //}
             }
         }
         else
         {
-            CFIndex write_status = CFWriteStreamGetStatus(tls_io_instance->sockWrite);
-            CFIndex read_status = CFReadStreamGetStatus(tls_io_instance->sockRead);
-            LogInfo("Cannot accept bytes, write status: %d, read status %d", write_status, read_status);
+            //CFIndex write_status = CFWriteStreamGetStatus(tls_io_instance->sockWrite);
+            //CFIndex read_status = CFReadStreamGetStatus(tls_io_instance->sockRead);
+            //LogInfo("Cannot accept bytes, write status: %d, read status %d", write_status, read_status);
+            LogInfo("Cannot accept bytes");
         }
     }
     else
@@ -520,17 +509,18 @@ static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
     CFWriteStreamRef outputStream = NULL;
     CFStreamCreatePairWithSocketToHost(NULL, tls_io_instance->hostname, tls_io_instance->port,
                                        &inputStream, &outputStream);
-    tls_io_instance->sockRead = CFBridgingRelease(inputStream);
-    tls_io_instance->sockWrite = CFBridgingRelease(outputStream);
 
-    if (tls_io_instance->sockRead != NULL && tls_io_instance->sockWrite != NULL)
+    if (inputStream != NULL && outputStream != NULL)
     {
         // The run loops didn't help the failure
         //CFReadStreamScheduleWithRunLoop(tls_io_instance->sockRead, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
         //CFWriteStreamScheduleWithRunLoop(tls_io_instance->sockWrite, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
         //LogInfo("fired run loops");
-        if (CFReadStreamSetProperty(tls_io_instance->sockRead, kCFStreamPropertySSLSettings, kCFStreamSocketSecurityLevelNegotiatedSSL))
+        //if (CFReadStreamSetProperty(inputStream, kCFStreamPropertySSLSettings, kCFStreamSocketSecurityLevelNegotiatedSSL))
+        if (true)
         {
+            tls_io_instance->sockRead = [CFBridgingRelease(inputStream) retain];
+            tls_io_instance->sockWrite = [CFBridgingRelease(outputStream) retain];
             tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_SSL;
         }
         else
@@ -548,23 +538,15 @@ static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
 
 static void dowork_poll_open_ssl(TLS_IO_INSTANCE* tls_io_instance)
 {
-    if (CFReadStreamOpen(tls_io_instance->sockRead) && CFWriteStreamOpen(tls_io_instance->sockWrite))
-    {   
-        /* Codes_SRS_TLSIO_30_080: [ The tlsio_dowork shall establish a TLS connection using the hostName and port provided during tlsio_open. ]*/
-        // Connect succeeded
-        tls_io_instance->tlsio_state = TLSIO_STATE_OPEN;
-        /* Codes_SRS_TLSIO_30_007: [ The phrase "enter TLSIO_STATE_EXT_OPEN" means the adapter shall call the on_io_open_complete function and pass IO_OPEN_OK and the on_io_open_complete_context that was supplied in tlsio_open . ]*/
-        /* Codes_SRS_TLSIO_30_083: [ If tlsio_dowork successfully opens the TLS connection it shall enter TLSIO_STATE_EX_OPEN. ]*/
-        tls_io_instance->on_open_complete(tls_io_instance->on_open_complete_context, IO_OPEN_OK);
-    }
-    else
-    {
-        CFErrorRef readError = CFReadStreamCopyError(tls_io_instance->sockRead);
-        CFErrorRef writeError = CFWriteStreamCopyError(tls_io_instance->sockWrite);
-        
-        LogInfo("Error opening streams - read error=%d;write error=%d", CFErrorGetCode(readError), CFErrorGetCode(writeError));
-        enter_open_error_state(tls_io_instance);
-    }
+    NSStreamStatus st = tls_io_instance->sockRead.streamStatus;
+    [tls_io_instance->sockRead setProperty:(__bridge id)CFSTR("kCFStreamSocketSecurityLevelTLSv1_2") forKey:(__bridge id)kCFStreamPropertySocketSecurityLevel];
+    //[tls_io_instance->sockWrite setProperty:(__bridge id)CFSTR("kCFStreamSocketSecurityLevelTLSv1_2") forKey:(__bridge id)kCFStreamPropertySocketSecurityLevel];
+    [tls_io_instance->sockRead scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    //[tls_io_instance->sockWrite scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    [tls_io_instance->sockWrite open];
+    [tls_io_instance->sockRead open];
+    tls_io_instance->tlsio_state = TLSIO_STATE_OPEN;
+    tls_io_instance->on_open_complete(tls_io_instance->on_open_complete_context, IO_OPEN_OK);
 }
 
 static void tlsio_appleios_dowork(CONCRETE_IO_HANDLE tls_io)
