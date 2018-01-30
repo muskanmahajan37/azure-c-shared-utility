@@ -33,6 +33,11 @@ typedef struct
 
 #define MAX_VALID_PORT 0xffff
 
+const char WEBSOCKET_HEADER_START[] = "GET /$iothub/websocket";
+const char WEBSOCKET_HEADER_NO_CERT_PARAM[] = "?iothub-no-client-cert=true";
+const size_t WEBSOCKET_HEADER_START_SIZE = sizeof(WEBSOCKET_HEADER_START) - 1;
+const size_t WEBSOCKET_HEADER_NO_CERT_PARAM_SIZE = sizeof(WEBSOCKET_HEADER_NO_CERT_PARAM) - 1;
+
 // The TLSIO_RECEIVE_BUFFER_SIZE has very little effect on performance, and is kept small
 // to minimize memory consumption.
 #define TLSIO_RECEIVE_BUFFER_SIZE 64
@@ -66,6 +71,7 @@ typedef struct TLS_IO_INSTANCE_TAG
     TLSIO_STATE tlsio_state;
     CFStringRef hostname;
     uint16_t port;
+    bool no_messages_yet_sent;
     CFReadStreamRef sockRead;
     CFWriteStreamRef sockWrite;
     SINGLYLINKEDLIST_HANDLE pending_transmission_list;
@@ -322,6 +328,7 @@ static int tlsio_appleios_open_async(CONCRETE_IO_HANDLE tls_io,
                     }
                     else
                     {
+                        tls_io_instance->no_messages_yet_sent = true;
                         /* Codes_SRS_TLSIO_30_034: [ The tlsio_open shall store the provided on_bytes_received, on_bytes_received_context, on_io_error, on_io_error_context, on_io_open_complete, and on_io_open_complete_context parameters for later use as specified and tested per other line entries in this document. ]*/
                         tls_io_instance->on_bytes_received = on_bytes_received;
                         tls_io_instance->on_bytes_received_context = on_bytes_received_context;
@@ -414,7 +421,6 @@ static void dowork_read(TLS_IO_INSTANCE* tls_io_instance)
             
             if (rcv_bytes > 0)
             {
-                LogBinary("received message ", buffer, rcv_bytes);
                 // tls_io_instance->on_bytes_received was already checked for NULL
                 // in the call to tlsio_appleios_open_async
                 /* Codes_SRS_TLSIO_30_100: [ As long as the TLS connection is able to provide received data, tlsio_dowork shall repeatedly read this data and call on_bytes_received with the pointer to the buffer containing the data, the number of bytes received, and the on_bytes_received_context. ]*/
@@ -443,7 +449,6 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
 
             if (write_result > 0)
             {
-                LogBinary("sent message ", buffer, write_result);
                 pending_message->unsent_size -= write_result;
                 if (pending_message->unsent_size == 0)
                 {
@@ -473,22 +478,7 @@ static void dowork_send(TLS_IO_INSTANCE* tls_io_instance)
                 }
                 else
                 {
-                    //SSLContextRef sslContext = (SSLContextRef)CFWriteStreamCopyProperty(tls_io_instance->sockWrite,
-                    //                                                     kCFStreamPropertySSLContext);
-    //                CFIndex handshake_result;
-    //                int count = 0;
-    //                struct timespec ts;
-    //                ts.tv_sec = 0;
-    //                ts.tv_nsec = 100 * 1000 * 1000; // 100 msec
-    //                do
-    //                {
-    //                    //handshake_result = CFWriteStreamWrite(tls_io_instance->sockWrite, buffer, 0);
-    //                    //write_error = CFWriteStreamCopyError(tls_io_instance->sockWrite);
-    //                    nanosleep(&ts, NULL);
-    //                    LogInfo("shaking %d", count++);
-    //                } while (handshake_result == errSSLWouldBlock);
                     LogInfo("errSSLWouldBlock on write");
-                    LogBinary("unsent message ", buffer, pending_message->unsent_size);
                 }
             }
         }
@@ -518,10 +508,6 @@ static void dowork_poll_socket(TLS_IO_INSTANCE* tls_io_instance)
 
     if (tls_io_instance->sockRead != NULL && tls_io_instance->sockWrite != NULL)
     {
-        // The run loops didn't help the failure
-        //CFReadStreamScheduleWithRunLoop(tls_io_instance->sockRead, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
-        //CFWriteStreamScheduleWithRunLoop(tls_io_instance->sockWrite, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
-        //LogInfo("fired run loops");
         if (CFReadStreamSetProperty(tls_io_instance->sockRead, kCFStreamPropertySSLSettings, kCFStreamSocketSecurityLevelNegotiatedSSL))
         {
             tls_io_instance->tlsio_state = TLSIO_STATE_OPENING_WAITING_SSL;
@@ -687,6 +673,23 @@ static int tlsio_appleios_send_async(CONCRETE_IO_HANDLE tls_io, const void* buff
                         }
                         else
                         {
+                            // For AMQP and MQTT over websockets, the interaction of the IoT Hub and the
+                            // Apple TLS requires hacking the websocket upgrade header with a
+                            // "iothub-no-client-cert=true" parameter to avoid a TLS hang.
+                            bool add_no_cert_url_parameter = false;
+                            if (tls_io_instance->no_messages_yet_sent)
+                            {
+                                tls_io_instance->no_messages_yet_sent = false;
+                                if (strncmp((const char*)buffer, WEBSOCKET_HEADER_START,
+                                            WEBSOCKET_HEADER_START_SIZE) == 0)
+                                {
+                                    add_no_cert_url_parameter = true;
+                                    size += WEBSOCKET_HEADER_NO_CERT_PARAM_SIZE;
+                                }
+                            }
+                            //const char* WEBSOCKET_HEADER_START = "GET /$iothub/websocket";
+                            //const char* WEBSOCKET_HEADER_NO_CERT_PARAM = "?iothub-no-client-cert=true";
+
                             /* Codes_SRS_TLSIO_30_063: [ The tlsio_appleios_compact_send shall enqueue for transmission the on_send_complete, the callback_context, the size, and the contents of buffer. ]*/
                             pending_transmission->bytes = (unsigned char*)malloc(size);
                             
@@ -703,7 +706,17 @@ static int tlsio_appleios_send_async(CONCRETE_IO_HANDLE tls_io, const void* buff
                                 pending_transmission->unsent_size = size;
                                 pending_transmission->on_send_complete = on_send_complete;
                                 pending_transmission->callback_context = callback_context;
-                                (void)memcpy(pending_transmission->bytes, buffer, size);
+                                if (add_no_cert_url_parameter)
+                                {
+                                    // Insert the WEBSOCKET_HEADER_NO_CERT_PARAM after the url
+                                    (void)memcpy(pending_transmission->bytes, WEBSOCKET_HEADER_START, WEBSOCKET_HEADER_START_SIZE);
+                                    (void)memcpy(pending_transmission->bytes + WEBSOCKET_HEADER_START_SIZE, WEBSOCKET_HEADER_NO_CERT_PARAM, WEBSOCKET_HEADER_NO_CERT_PARAM_SIZE);
+                                    (void)memcpy(pending_transmission->bytes + WEBSOCKET_HEADER_START_SIZE + WEBSOCKET_HEADER_NO_CERT_PARAM_SIZE, buffer + WEBSOCKET_HEADER_START_SIZE, size - WEBSOCKET_HEADER_START_SIZE - WEBSOCKET_HEADER_NO_CERT_PARAM_SIZE);
+                                }
+                                else
+                                {
+                                    (void)memcpy(pending_transmission->bytes, buffer, size);
+                                }
                                 
                                 if (singlylinkedlist_add(tls_io_instance->pending_transmission_list, pending_transmission) == NULL)
                                 {
