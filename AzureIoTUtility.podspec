@@ -28,10 +28,12 @@ This is an unfinished (and non-functional) preview release of Azure IoT Utility.
 
   s.ios.deployment_target = '8.0'
 
-  s.source_files = 'src/**/*.c', 'inc/azure_c_shared_utility/*.h', 'inc/'
+  s.source_files = 'src/**/*.c', 'inc/azure_c_shared_utility/*.h', 'inc/', 'pal/tlsio_options.c', 'pal/agenttime.c', 'adapters/uniqueid_linux.c', 'adapters/httpapi_compact.c', 'adapters/threadapi_pthreads.c'
   
   s.prepare_command = <<-CMD
   cp pal/generic/refcount_os.h inc/azure_c_shared_utility
+  cp pal/objective-c/*.c src
+  cp pal/objective-c/*.h inc/azure_c_shared_utility
   rm -f src/etwlogger_driver.c
   rm -f src/etwxlogging.c
   rm -f src/tlsio_cy*.*
@@ -40,13 +42,16 @@ This is an unfinished (and non-functional) preview release of Azure IoT Utility.
   rm -f src/tlsio_schannel.c
   rm -f src/x509_schannel.c
   rm -f src/x509_openssl.c
+  # Restore gballoc.c after Lock is implemented
+  rm -f src/gballoc.c
   CMD
 
   s.public_header_files = 'inc/azure_c_shared_utility/*.h'
   s.header_mappings_dir = 'inc/'
   s.xcconfig = {
     'USE_HEADERMAP' => 'NO',
-    'USER_HEADER_SEARCH_PATHS' => '"/Users/v-royspr/Documents/test_pod/AzureIoTUtility/inc/"'
+    'USER_HEADER_SEARCH_PATHS' => '"/Users/v-royspr/Documents/test_pod/AzureIoTUtility/inc/"',
+    'ALWAYS_SEARCH_USER_PATHS' => 'NO'
   }
   # s.frameworks = 'UIKit', 'MapKit'
   # s.dependency 'AFNetworking', '~> 2.3'
