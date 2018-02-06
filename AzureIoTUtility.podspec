@@ -50,7 +50,7 @@ This is an unfinished (and non-functional) preview release of Azure IoT Utility.
   s.header_mappings_dir = 'inc/'
   s.xcconfig = {
     'USE_HEADERMAP' => 'NO',
-    'USER_HEADER_SEARCH_PATHS' => '"/Users/v-royspr/Documents/test_pod/AzureIoTUtility/inc/"',
+    'USER_HEADER_SEARCH_PATHS' => '"${PODS_ROOT}/AzureIoTUtility/inc/"',
     'ALWAYS_SEARCH_USER_PATHS' => 'NO'
   }
   # s.frameworks = 'UIKit', 'MapKit'
