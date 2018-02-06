@@ -241,7 +241,6 @@ static CONCRETE_IO_HANDLE tlsio_appleios_create(void* io_create_parameters)
                 }
                 else
                 {
-                    int ms_result;
                     memset(result, 0, sizeof(TLS_IO_INSTANCE));
                     result->port = (uint16_t)tls_io_config->port;
                     result->tlsio_state = TLSIO_STATE_CLOSED;
