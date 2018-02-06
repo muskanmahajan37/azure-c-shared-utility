@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'AzureIoTUtility'
-  s.version          = '0.1.1'
+  s.version          = '0.1.2'
   s.summary          = 'Unfinished AzureIoTUtility preview library for CocoaPods.'
 
 # This description is used to generate tags and improve search results.
@@ -50,8 +50,7 @@ This is an unfinished (and non-functional) preview release of Azure IoT Utility.
   s.header_mappings_dir = 'inc/'
   s.xcconfig = {
     'USE_HEADERMAP' => 'NO',
-    'USER_HEADER_SEARCH_PATHS' => '"${PODS_ROOT}/AzureIoTUtility/inc/"',
-    'ALWAYS_SEARCH_USER_PATHS' => 'NO'
+    'USER_HEADER_SEARCH_PATHS' => '"${PODS_ROOT}/AzureIoTUtility/inc/"'
   }
   # s.frameworks = 'UIKit', 'MapKit'
   # s.dependency 'AFNetworking', '~> 2.3'
