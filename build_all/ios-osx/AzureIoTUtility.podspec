@@ -2,8 +2,8 @@
 
 Pod::Spec.new do |s|
   s.name             = 'AzureIoTUtility'
-  s.version          = '0.0.0.1-pre-release'
-  s.summary          = 'Unfinished AzureIoTUtility preview library for CocoaPods.'
+  s.version          = '0.0.0.1-pre-release.0.0.1'
+  s.summary          = 'Unfinished AzureIoT C-Utility preview library for CocoaPods.'
 
   s.description      = <<-DESC
 This is an unfinished (and non-functional) preview CocoaPods 
@@ -24,7 +24,6 @@ which is part of the Microsoft Azure IoT C SDK.
   s.prepare_command = <<-CMD
   cp pal/generic/refcount_os.h inc/azure_c_shared_utility
   cp adapters/linux_time.h inc
-  cp pal/objective-c/*.c src
   cp pal/objective-c/*.h inc/azure_c_shared_utility
   rm -f src/etwlogger_driver.c
   rm -f src/etwxlogging.c
@@ -34,16 +33,16 @@ which is part of the Microsoft Azure IoT C SDK.
   rm -f src/tlsio_schannel.c
   rm -f src/x509_schannel.c
   rm -f src/x509_openssl.c
-  # Restore gballoc.c after Lock is implemented
-  rm -f src/gballoc.c
   CMD
 
   s.source_files = 
-    'src/**/*.c', 
-    'inc/', 
     'inc/azure_c_shared_utility/*.h', 
+    'src/*.c', 
     'pal/tlsio_options.c', 
-    'pal/agenttime.c', 
+    'pal/agenttime.c',
+    'pal/ios-osx/*.c',
+    'adapters/lock_pthreads.c', 
+    'adapters/threadapi_pthreads.c', 
     'adapters/linux_time.c', 
     'adapters/tickcounter_linux.c', 
     'adapters/uniqueid_linux.c', 
@@ -58,7 +57,7 @@ which is part of the Microsoft Azure IoT C SDK.
   
   s.xcconfig = {
     'USE_HEADERMAP' => 'NO',
-    'USER_HEADER_SEARCH_PATHS' => '"${PODS_ROOT}/AzureIoTUtility/inc/"',
+    'HEADER_SEARCH_PATHS' => '"${SRCROOT}/AzureIoTUtility/inc/"',
     'ALWAYS_SEARCH_USER_PATHS' => 'NO'
   }
 end
