@@ -36,7 +36,7 @@ which is part of the Microsoft Azure IoT C SDK.
   CMD
 
   s.source_files = 
-    'inc/azure_c_shared_utility/*.h', 
+    'inc/**/*.h', 
     'src/*.c', 
     'pal/tlsio_options.c', 
     'pal/agenttime.c',
