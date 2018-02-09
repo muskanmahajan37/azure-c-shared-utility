@@ -24,7 +24,7 @@ which is part of the Microsoft Azure IoT C SDK.
   s.prepare_command = <<-CMD
   cp pal/generic/refcount_os.h inc/azure_c_shared_utility
   cp adapters/linux_time.h inc
-  cp pal/objective-c/*.h inc/azure_c_shared_utility
+  cp pal/ios-osx/*.h inc/azure_c_shared_utility
   rm -f src/etwlogger_driver.c
   rm -f src/etwxlogging.c
   rm -f src/tlsio_cy*.*
