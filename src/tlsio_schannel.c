@@ -992,7 +992,8 @@ CONCRETE_IO_HANDLE tlsio_schannel_create(void* io_create_parameters)
             result->credential_handle_allocated = false;
             result->x509_schannel_handle = NULL;
 
-            result->host_name = (SEC_TCHAR*)malloc(sizeof(SEC_TCHAR) * (1 + strlen(tls_io_config->hostname)));
+            size_t host_name_size = sizeof(SEC_TCHAR) * (1 + strlen(tls_io_config->hostname));
+            result->host_name = (SEC_TCHAR*)malloc(host_name_size);
             if (result->host_name == NULL)
             {
                 LogError("malloc failed");
@@ -1007,7 +1008,7 @@ CONCRETE_IO_HANDLE tlsio_schannel_create(void* io_create_parameters)
                 #ifdef WINCE
                 (void) mbstowcs(result->host_name, tls_io_config->hostname, strlen(tls_io_config->hostname));
                 #else
-                (void)strcpy(result->host_name, tls_io_config->hostname);
+                (void)strcpy_s(result->host_name, host_name_size, tls_io_config->hostname);
                 #endif
 
                 if (tls_io_config->underlying_io_interface != NULL)

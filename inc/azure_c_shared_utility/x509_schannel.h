@@ -4,7 +4,8 @@
 #ifndef X509_SCHANNEL_H
 #define X509_SCHANNEL_H
 
-#include "windows.h"
+#include <windows.h>
+#include <wincrypt.h>
 
 #ifdef __cplusplus
 extern "C" {

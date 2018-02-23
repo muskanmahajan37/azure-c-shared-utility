@@ -3,18 +3,19 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include "azure_c_shared_utility/xlogging.h"
 #include "azure_c_shared_utility/consolelogger.h"
 
 #if (defined(_MSC_VER)) && (!(defined WINCE))
-#include "windows.h"
+#include <windows.h>
 
 /*returns a string as if printed by vprintf*/
 static char* vprintf_alloc(const char* format, va_list va)
 {
     char* result;
-    int neededSize = vsnprintf(NULL, 0, format, va);
+    int neededSize = _vscprintf(format, va);
     if (neededSize < 0)
     {
         result = NULL;
@@ -28,7 +29,7 @@ static char* vprintf_alloc(const char* format, va_list va)
         }
         else
         {
-            if (vsnprintf(result, neededSize + 1, format, va) != neededSize)
+            if (_vsnprintf_s(result, neededSize + 1, _TRUNCATE, format, va) != neededSize)
             {
                 free(result);
                 result = NULL;

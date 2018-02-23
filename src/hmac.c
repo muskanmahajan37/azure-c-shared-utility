@@ -114,12 +114,12 @@ int hmacReset(HMACContext *ctx, enum SHAversion whichSha,
     */
 
     /* store key into the pads, XOR'd with ipad and opad values */
-    for (i = 0; i < key_len; i++) {
+    for (i = 0; i < key_len && i < USHA_Max_Message_Block_Size; i++) {
         k_ipad[i] = key[i] ^ 0x36;
         ctx->k_opad[i] = key[i] ^ 0x5c;
     }
     /* remaining pad bytes are '\0' XOR'd with ipad and opad values */
-    for (; i < blocksize; i++) {
+    for (; i < blocksize && i < USHA_Max_Message_Block_Size; i++) {
         k_ipad[i] = 0x36;
         ctx->k_opad[i] = 0x5c;
     }

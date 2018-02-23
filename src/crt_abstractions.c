@@ -246,7 +246,7 @@ int sprintf_s(char* dst, size_t dstSizeInBytes, const char* format, ...)
         va_list args;
         va_start(args, format);
         /*Codes_SRS_CRT_ABSTRACTIONS_99_027: [sprintf_s shall return the number of characters stored in dst upon success.  This number shall not include the terminating null character.]*/
-        result = vsnprintf(dst, dstSizeInBytes, format, args);
+        result = _vsnprintf(dst, dstSizeInBytes, format, args);
         va_end(args);
 
         /*C99: Thus, the null-terminated output has been completely written if and only if the returned value is nonnegative and less than n*/
@@ -553,6 +553,7 @@ static FLOAT_STRING_TYPE splitFloatString(const char* nptr, char** endptr, int *
     return result;
 }
 
+#if 0 // gmileka
 /*Codes_SRS_CRT_ABSTRACTIONS_21_015: [The strtof_s must convert the initial portion of the string pointed to by nptr to float representation.]*/
 /*Codes_SRS_CRT_ABSTRACTIONS_21_016: [The strtof_s must return the float that represents the value in the initial part of the string. If any.]*/
 float strtof_s(const char* nptr, char** endptr)
@@ -676,6 +677,7 @@ long double strtold_s(const char* nptr, char** endptr)
     return result;
 }
 
+#endif
 
 /*Codes_SRS_CRT_ABSTRACTIONS_99_038: [mallocAndstrcpy_s shall allocate memory for destination buffer to fit the string in the source parameter.]*/
 int mallocAndStrcpy_s(char** destination, const char* source)

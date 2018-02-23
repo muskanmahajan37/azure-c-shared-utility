@@ -13,6 +13,7 @@
 #define UUID_STRING_SIZE            (UUID_STRING_LENGTH + 1)
 #define __SUCCESS__                 0
 #define UUID_FORMAT_STRING          "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+#define DOUBLE_HEX_DIGIT_SIZE       3
 
 int UUID_from_string(const char* uuid_string, UUID* uuid)
 {
@@ -51,11 +52,12 @@ int UUID_from_string(const char* uuid_string, UUID* uuid)
                 }
                 else
                 {
-                    char double_hex_digit[3] = { 0, 0, 0 };
+                    char double_hex_digit[DOUBLE_HEX_DIGIT_SIZE] = { 0, 0, 0 };
 
                     (void)memcpy(double_hex_digit, uuid_string + i, 2);
 
-                    if (sscanf(double_hex_digit, "%02hhx", uuid_bytes + j) != 1)
+                    unsigned short hhx = 0;
+                    if (sscanf_s(double_hex_digit, "%02hhx", &hhx) != 1)
                     {
                         // Codes_SRS_UUID_09_009: [ If `uuid` fails to be generated, UUID_from_string shall return a non-zero value ]
                         LogError("Failed decoding UUID string (%d)", i);
@@ -64,6 +66,7 @@ int UUID_from_string(const char* uuid_string, UUID* uuid)
                     }
                     else
                     {
+                        *(uuid_bytes + j) = (unsigned char)hhx;
                         i += 2;
                         j++;
                     }
@@ -77,6 +80,7 @@ int UUID_from_string(const char* uuid_string, UUID* uuid)
 
 char* UUID_to_string(UUID* uuid)
 {
+    unsigned int resultSize = sizeof(char) * UUID_STRING_SIZE;
     char* result;
 
     // Codes_SRS_UUID_09_011: [ If `uuid` is NULL, UUID_to_string shall return a non-zero value ]  
@@ -86,7 +90,7 @@ char* UUID_to_string(UUID* uuid)
         result = NULL;
     }
     // Codes_SRS_UUID_09_012: [ UUID_to_string shall allocate a valid UUID string (`uuid_string`) as per RFC 4122 ]  
-    else if ((result = (char*)malloc(sizeof(char) * UUID_STRING_SIZE)) == NULL)
+    else if ((result = (char*)malloc(resultSize)) == NULL)
     {
         // Codes_SRS_UUID_09_013: [ If `uuid_string` fails to be allocated, UUID_to_string shall return NULL ]  
         LogError("Failed allocating UUID string");
@@ -99,7 +103,7 @@ char* UUID_to_string(UUID* uuid)
         uuid_bytes = (unsigned char*)uuid;
 
         // Codes_SRS_UUID_09_014: [ Each character in `uuid` shall be written in the respective positions of `uuid_string` as a 2-digit HEX value ]  
-        number_of_chars_written = sprintf(result, UUID_FORMAT_STRING,
+        number_of_chars_written = sprintf_s(result, resultSize, UUID_FORMAT_STRING,
             uuid_bytes[0], uuid_bytes[1], uuid_bytes[2], uuid_bytes[3],
             uuid_bytes[4], uuid_bytes[5],
             uuid_bytes[6], uuid_bytes[7],

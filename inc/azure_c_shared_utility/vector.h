@@ -10,6 +10,7 @@
 
 #ifdef __cplusplus
 #include <cstddef>
+#include <cstdbool>
 extern "C"
 {
 #else

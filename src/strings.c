@@ -130,14 +130,6 @@ STRING_HANDLE STRING_construct_sprintf(const char* format, ...)
 {
     STRING* result;
     
-#ifdef STRINGS_C_SPRINTF_BUFFER_SIZE
-    size_t maxBufSize = STRINGS_C_SPRINTF_BUFFER_SIZE;
-    char buf[STRINGS_C_SPRINTF_BUFFER_SIZE];
-#else
-    size_t maxBufSize = 0;
-    char* buf = NULL;
-#endif
-
     if (format != NULL)
     {
         va_list arg_list;
@@ -145,24 +137,24 @@ STRING_HANDLE STRING_construct_sprintf(const char* format, ...)
         va_start(arg_list, format);
 
         /* Codes_SRS_STRING_07_041: [STRING_construct_sprintf shall determine the size of the resulting string and allocate the necessary memory.] */
-        length = vsnprintf(buf, maxBufSize, format, arg_list);
+        length = _vscprintf(format, arg_list);
         va_end(arg_list);
         if (length > 0)
         {
             result = (STRING*)malloc(sizeof(STRING));
             if (result != NULL)
             {
-                result->s = (char*)malloc(length+1);
+                result->s = (char*)malloc(length + 1);
                 if (result->s != NULL)
                 {
                     va_start(arg_list, format);
-                    if (vsnprintf(result->s, length+1, format, arg_list) < 0)
+                    if (_vsnprintf_s(result->s, length + 1, _TRUNCATE, format, arg_list) < 0)
                     {
                         /* Codes_SRS_STRING_07_040: [If any error is encountered STRING_construct_sprintf shall return NULL.] */
                         free(result->s);
                         free(result);
                         result = NULL;
-                        LogError("Failure: vsnprintf formatting failed.");
+                        LogError("Failure: _vsnprintf_s formatting failed.");
                     }
                     va_end(arg_list);
                 }
@@ -530,15 +522,7 @@ __attribute__ ((format (printf, 2, 3)))
 int STRING_sprintf(STRING_HANDLE handle, const char* format, ...)
 {
     int result;
-    
-#ifdef STRINGS_C_SPRINTF_BUFFER_SIZE
-    size_t maxBufSize = STRINGS_C_SPRINTF_BUFFER_SIZE;
-    char buf[STRINGS_C_SPRINTF_BUFFER_SIZE];
-#else
-    size_t maxBufSize = 0;
-    char* buf = NULL;
-#endif
-    
+
     if (handle == NULL || format == NULL)
     {
         /* Codes_SRS_STRING_07_042: [if the parameters s1 or format are NULL then STRING_sprintf shall return non zero value.] */
@@ -551,12 +535,12 @@ int STRING_sprintf(STRING_HANDLE handle, const char* format, ...)
         int s2Length;
         va_start(arg_list, format);
 
-        s2Length = vsnprintf(buf, maxBufSize, format, arg_list);
+        s2Length = _vscprintf(format, arg_list);
         va_end(arg_list);
         if (s2Length < 0)
         {
             /* Codes_SRS_STRING_07_043: [If any error is encountered STRING_sprintf shall return a non zero value.] */
-            LogError("Failure vsnprintf return < 0");
+            LogError("Failure _vsnprintf_s return < 0");
             result = __FAILURE__;
         }
         else if (s2Length == 0)
@@ -574,10 +558,10 @@ int STRING_sprintf(STRING_HANDLE handle, const char* format, ...)
             {
                 s1->s = temp;
                 va_start(arg_list, format);
-                if (vsnprintf(s1->s + s1Length, s1Length + s2Length + 1, format, arg_list) < 0)
+                if (_vsnprintf_s(s1->s + s1Length, s2Length + 1, _TRUNCATE, format, arg_list) < 0)
                 {
                     /* Codes_SRS_STRING_07_043: [If any error is encountered STRING_sprintf shall return a non zero value.] */
-                    LogError("Failure vsnprintf formatting error");
+                    LogError("Failure _vsnprintf_s formatting error");
                     s1->s[s1Length] = '\0';
                     result = __FAILURE__;
                 }

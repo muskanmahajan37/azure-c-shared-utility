@@ -80,8 +80,9 @@ static const char* ConstructHeadersString(HTTP_HEADERS_HANDLE httpHeadersHandle)
         }
         else
         {
-            result = (char*)malloc(toAlloc*sizeof(char) + 1 );
-            
+            size_t resultSize = toAlloc * sizeof(char) + 1;
+            result = (char*)malloc(resultSize);
+
             if (result == NULL)
             {
                 LogError("unable to malloc");
@@ -100,8 +101,8 @@ static const char* ConstructHeadersString(HTTP_HEADERS_HANDLE httpHeadersHandle)
                     }
                     else
                     {
-                        (void)strcat(result, temp);
-                        (void)strcat(result, "\r\n");
+                        (void)strcat_s(result, resultSize, temp);
+                        (void)strcat_s(result, resultSize, "\r\n");
                         free(temp);
                     }
                 }
@@ -591,7 +592,7 @@ HTTPAPI_RESULT HTTPAPI_ExecuteRequest(HTTP_HANDLE handle, HTTPAPI_REQUEST_TYPE r
                                                                             char* tokenTemp;
                                                                             size_t tokenTemp_size;
 
-                                                                            tokenTemp_size = WideCharToMultiByte(CP_ACP, 0, token, -1, NULL, 0, NULL, NULL);
+                                                                            tokenTemp_size = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, token, -1, NULL, 0, NULL, NULL);
                                                                             if (tokenTemp_size == 0)
                                                                             {
                                                                                 LogError("WideCharToMultiByte failed");
@@ -605,7 +606,7 @@ HTTPAPI_RESULT HTTPAPI_ExecuteRequest(HTTP_HANDLE handle, HTTPAPI_REQUEST_TYPE r
                                                                                 }
                                                                                 else
                                                                                 {
-                                                                                    if (WideCharToMultiByte(CP_ACP, 0, token, -1, tokenTemp, (int)tokenTemp_size, NULL, NULL) > 0)
+                                                                                    if (WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, token, -1, tokenTemp, (int)tokenTemp_size, NULL, NULL) > 0)
                                                                                     {
                                                                                         /*breaking the token in 2 parts: everything before the first ":" and everything after the first ":"*/
                                                                                         /* if there is no such character, then skip it*/

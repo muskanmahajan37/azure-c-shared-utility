@@ -8,7 +8,6 @@
 #ifndef __cplusplus
 
 typedef unsigned char bool;
-typedef bool _Bool;
 
 #define false	0
 #define true	1

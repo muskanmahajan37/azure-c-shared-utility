@@ -14,6 +14,8 @@
 #include "azure_c_shared_utility/optimize_size.h"
 #include "azure_c_shared_utility/xlogging.h"
 
+#define PORT_STRING_SIZE 16
+
 typedef enum IO_STATE_TAG
 {
     IO_STATE_CLOSED,
@@ -167,10 +169,11 @@ CONCRETE_IO_HANDLE socketio_create(void* io_create_parameters)
             {
                 if (socket_io_config->hostname != NULL)
                 {
-                    result->hostname = (char*)malloc(strlen(socket_io_config->hostname) + 1);
+                    size_t hostnameSize = strlen(socket_io_config->hostname) + 1;
+                    result->hostname = (char*)malloc(hostnameSize);
                     if (result->hostname != NULL)
                     {
-                        (void)strcpy(result->hostname, socket_io_config->hostname);
+                        (void)strcpy_s(result->hostname, hostnameSize, socket_io_config->hostname);
                     }
 
                     result->socket = INVALID_SOCKET;
@@ -283,15 +286,23 @@ int socketio_open(CONCRETE_IO_HANDLE socket_io, ON_IO_OPEN_COMPLETE on_io_open_c
             }
             else
             {
-                char portString[16];
-                ADDRINFO addrHint = { 0 };
-                ADDRINFO* addrInfo = NULL;
+                wchar_t portString[PORT_STRING_SIZE];
+                ADDRINFOW addrHint = { 0 };
+                ADDRINFOW* addrInfo = NULL;
 
                 addrHint.ai_family = AF_INET;
                 addrHint.ai_socktype = SOCK_STREAM;
                 addrHint.ai_protocol = 0;
-                sprintf(portString, "%u", socket_io_instance->port);
-                if (getaddrinfo(socket_io_instance->hostname, portString, &addrHint, &addrInfo) != 0)
+                swprintf_s(portString, PORT_STRING_SIZE, L"%u", socket_io_instance->port);
+
+                size_t length = strlen(socket_io_instance->hostname);
+                size_t requiredCharCount = MultiByteToWideChar(CP_UTF8, 0, socket_io_instance->hostname, (int)length, NULL, 0);
+                ++requiredCharCount;
+
+                wchar_t* hostNameString = malloc(requiredCharCount * sizeof(wchar_t));
+                MultiByteToWideChar(CP_UTF8, 0, socket_io_instance->hostname, (int)length, hostNameString, (int)requiredCharCount);
+
+                if (GetAddrInfoW(hostNameString, portString, &addrHint, &addrInfo) != 0)
                 {
                     LogError("Failure: getaddrinfo failure %d.", WSAGetLastError());
                     (void)closesocket(socket_io_instance->socket);
@@ -329,8 +340,10 @@ int socketio_open(CONCRETE_IO_HANDLE socket_io, ON_IO_OPEN_COMPLETE on_io_open_c
                         result = 0;
                     }
 
-                    freeaddrinfo(addrInfo);
+                    FreeAddrInfoW(addrInfo);
                 }
+
+                free(hostNameString);
             }
         }
     }
